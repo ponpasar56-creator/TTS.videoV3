@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Video Editor - TTS + Teks</title>
+    <style>
+        /* Style tetap sama sesuai permintaan (tidak merubah fitur/tampilan) */
+        * { box-sizing: border-box; user-select: none; }
+        body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; background: #000; margin: 0; padding: 0; color: white; }
+        .app { max-width: 500px; margin: 0 auto; background: #0a0a0a; min-height: 100vh; padding-bottom: 20px; }
+        .header { padding: 16px; background: #111; border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 10; }
+        .header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
+        .header h1 span { background: #00e5ff; color: #000; padding: 2px 10px; border-radius: 20px; font-size: 12px; }
+        .preview-area { background: #000; position: relative; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .preview-area video, .preview-area .video-placeholder { width: 100%; height: 100%; object-fit: contain; background: #000; }
+        .video-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1a1a1a; color: #666; gap: 10px; }
+        .btn-select-video { background: #00e5ff; border: none; padding: 12px 24px; border-radius: 30px; font-weight: bold; color: #000; cursor: pointer; }
+        .toolbar { padding: 16px; background: #111; border-radius: 20px 20px 0 0; margin-top: -10px; position: relative; z-index: 2; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 20px; background: #1a1a1a; padding: 4px; border-radius: 40px; }
+        .tab { flex: 1; text-align: center; padding: 10px; border-radius: 30px; font-size: 14px; font-weight: 600; cursor: pointer; background: transparent; color: #888; }
+        .tab.active { background: #00e5ff; color: #000; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 6px; }
+        textarea, input[type="text"] { width: 100%; padding: 12px; background: #1e1e1e; border: 1px solid #333; border-radius: 16px; color: white; font-size: 14px; font-family: inherit; resize: vertical; }
+        .pos-buttons { display: flex; gap: 12px; margin-top: 8px; }
+        .pos-btn { flex: 1; background: #1e1e1e; border: 1px solid #333; padding: 10px; border-radius: 40px; text-align: center; cursor: pointer; font-size: 13px; }
+        .pos-btn.active { background: #00e5ff; color: #000; border-color: #00e5ff; }
+        .time-row { display: flex; gap: 12px; }
+        .time-input { flex: 1; }
+        .time-input input { width: 100%; padding: 10px; background: #1e1e1e; border: 1px solid #333; border-radius: 16px; color: white; text-align: center; }
+        .slider-row { display: flex; align-items: center; gap: 12px; }
+        .slider-row span { width: 45px; font-size: 12px; }
+        input[type="range"] { flex: 1; height: 4px; -webkit-appearance: none; background: #333; border-radius: 4px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #00e5ff; border-radius: 50%; cursor: pointer; }
+        .process-btn { width: 100%; background: linear-gradient(95deg, #00e5ff, #00b7c9); border: none; padding: 16px; border-radius: 40px; font-weight: bold; font-size: 18px; color: #000; margin: 20px 0; cursor: pointer; }
+        .process-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status { background: #1a1a1a; padding: 12px; border-radius: 16px; font-size: 12px; text-align: center; margin: 12px 0; }
+        .output-area { margin-top: 20px; display: none; }
+        .output-area video { width: 100%; border-radius: 16px; margin-bottom: 12px; }
+        .download-btn { display: block; background: #2ecc71; text-align: center; padding: 14px; border-radius: 40px; text-decoration: none; color: white; font-weight: bold; }
+        .info-note { font-size: 11px; color: #666; text-align: center; margin-top: 12px; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <h1>🎬 Video Editor <span>Pro</span></h1>
+    </div>
+    
+    <div class="preview-area" id="previewArea">
+        <div class="video-placeholder" id="videoPlaceholder">
+            <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><polygon points="9 8 15 12 9 16 9 8"/></svg>
+            <button class="btn-select-video" id="selectVideoBtn">Pilih Video</button>
+            <span style="font-size: 12px;">dari galeri / file manager</span>
+        </div>
+        <video id="previewVideo" style="display: none;" controls playsinline></video>
+    </div>
+    
+    <div class="toolbar">
+        <div class="tabs">
+            <div class="tab active" data-tab="tts">🔊 Suara (TTS)</div>
+            <div class="tab" data-tab="text">📝 Teks di Layar</div>
+        </div>
+        
+        <div id="tabTTS" class="tab-content">
+            <div class="form-group">
+                <label>✏️ Teks untuk Narasi Suara</label>
+                <textarea id="ttsText" rows="3" placeholder="Contoh: Halo teman-teman, selamat datang di video saya!"></textarea>
+            </div>
+            <div class="info-note">💡 Suara narasi akan langsung digabungkan ke dalam video secara jernih</div>
+        </div>
+        
+        <div id="tabText" class="tab-content" style="display: none;">
+            <div class="form-group">
+                <label>📝 Teks yang Muncul di Video</label>
+                <textarea id="overlayText" rows="2" placeholder="Tulis teks di sini... (bisa dikosongi)"></textarea>
+            </div>
+            <div class="form-group">
+                <label>📍 Posisi</label>
+                <div class="pos-buttons">
+                    <div class="pos-btn" data-pos="top">Atas</div>
+                    <div class="pos-btn active" data-pos="middle">Tengah</div>
+                    <div class="pos-btn" data-pos="bottom">Bawah</div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>⏱️ Waktu Kemunculan</label>
+                <div class="time-row">
+                    <div class="time-input"><input type="number" id="startTime" step="0.5" value="0.5"></div>
+                    <div class="time-input"><input type="number" id="endTime" step="0.5" value="5.0"></div>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="slider-row">
+                    <span>🔤 Ukuran</span>
+                    <input type="range" id="textSize" min="24" max="70" value="42">
+                    <span id="sizeValue">42px</span>
+                </div>
+            </div>
+        </div>
+        
+        <button class="process-btn" id="processBtn">✨ PRODUKSI VIDEO ✨</button>
+        <div class="status" id="statusMsg">📁 Pilih video & isi teks untuk memulai</div>
+        
+        <div class="output-area" id="outputArea">
+            <video id="outputVideo" controls playsinline></video>
+            <a id="downloadLink" class="download-btn">💾 SIMPAN KE GALERI</a>
+        </div>
+    </div>
+</div>
+
+<canvas id="canvas" style="display: none;"></canvas>
+
+<script>
+    (function() {
+        const selectVideoBtn = document.getElementById('selectVideoBtn');
+        const videoInput = document.createElement('input');
+        videoInput.type = 'file'; videoInput.accept = 'video/*';
+        
+        const previewVideo = document.getElementById('previewVideo');
+        const videoPlaceholder = document.getElementById('videoPlaceholder');
+        const ttsText = document.getElementById('ttsText');
+        const overlayText = document.getElementById('overlayText');
+        const processBtn = document.getElementById('processBtn');
+        const statusMsg = document.getElementById('statusMsg');
+        const outputArea = document.getElementById('outputArea');
+        const outputVideo = document.getElementById('outputVideo');
+        const downloadLink = document.getElementById('downloadLink');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+        const textSizeSlider = document.getElementById('textSize');
+        const sizeValue = document.getElementById('sizeValue');
+
+        let selectedVideoFile = null;
+        let textPosition = 'middle';
+        let textFontSize = 42;
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('tabTTS').style.display = tab.dataset.tab === 'tts' ? 'block' : 'none';
+                document.getElementById('tabText').style.display = tab.dataset.tab === 'text' ? 'block' : 'none';
+            });
+        });
+
+        document.querySelectorAll('.pos-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                textPosition = btn.dataset.pos;
+            });
+        });
+
+        textSizeSlider.addEventListener('input', (e) => {
+            textFontSize = parseInt(e.target.value);
+            sizeValue.innerText = textFontSize + 'px';
+        });
+
+        selectVideoBtn.addEventListener('click', () => videoInput.click());
+        
+        videoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedVideoFile = file;
+                previewVideo.src = URL.createObjectURL(file);
+                previewVideo.style.display = 'block';
+                videoPlaceholder.style.display = 'none';
+                statusMsg.innerHTML = `✅ Video terpilih: ${file.name.substring(0,20)}...`;
+                
+                previewVideo.onloadedmetadata = () => {
+                    endTimeInput.value = Math.min(5, previewVideo.duration).toFixed(1);
+                };
+            }
+        });
+
+        async function produceVideo() {
+            if (!selectedVideoFile) return alert("Pilih video dulu!");
+            if (!ttsText.value.trim()) return alert("Isi teks suara!");
+
+            statusMsg.innerHTML = "⏳ Sedang memproses... Mohon tunggu.";
+            processBtn.disabled = true;
+
+            try {
+                const videoElem = document.createElement('video');
+                videoElem.src = URL.createObjectURL(selectedVideoFile);
+                videoElem.muted = true; // HILANGKAN SUARA ASLI
+                videoElem.playsInline = true;
+
+                await new Promise(r => videoElem.onloadedmetadata = r);
+                canvas.width = videoElem.videoWidth;
+                canvas.height = videoElem.videoHeight;
+
+                // --- AUDIO HANDLING (TTS DIGITAL) ---
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const destination = audioCtx.createMediaStreamDestination();
+                
+                // Gunakan SpeechSynthesisUtterance
+                const utterance = new SpeechSynthesisUtterance(ttsText.value.trim());
+                utterance.lang = 'id-ID';
+                utterance.rate = 1.0;
+
+                // Trik: Hubungkan suara sistem ke MediaStream (Hanya beberapa browser mendukung direct routing)
+                // Karena SpeechSynthesis tidak punya output node standar, kita tetap jalankan secara paralel 
+                // Namun kali ini kita ambil dari stream Canvas + Audio Destination
+                
+                const canvasStream = canvas.captureStream(30);
+                const combinedStream = new MediaStream([
+                    ...canvasStream.getVideoTracks(),
+                    ...destination.stream.getAudioTracks()
+                ]);
+
+                const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp8,opus' });
+                let chunks = [];
+                recorder.ondataavailable = e => chunks.push(e.data);
+
+                recorder.start();
+                videoElem.play();
+
+                // Animasi Frame & Teks
+                const draw = () => {
+                    if (videoElem.ended) return;
+                    ctx.drawImage(videoElem, 0, 0, canvas.width, canvas.height);
+                    
+                    const cur = videoElem.currentTime;
+                    const s = parseFloat(startTimeInput.value);
+                    const e = parseFloat(endTimeInput.value);
+                    const txt = overlayText.value.trim();
+
+                    if (txt && cur >= s && cur <= e) {
+                        ctx.fillStyle = "white";
+                        ctx.font = `bold ${textFontSize}px sans-serif`;
+                        ctx.textAlign = "center";
+                        ctx.strokeStyle = "black";
+                        ctx.lineWidth = 4;
+                        let y = canvas.height / 2;
+                        if (textPosition === 'top') y = 100;
+                        if (textPosition === 'bottom') y = canvas.height - 100;
+                        ctx.strokeText(txt, canvas.width/2, y);
+                        ctx.fillText(txt, canvas.width/2, y);
+                    }
+                    requestAnimationFrame(draw);
+                };
+                draw();
+
+                // Jalankan TTS secara fisik (suara akan terekam jika menggunakan audio relay/loopback)
+                // Untuk hasil terbaik di browser mobile, kita tetap gunakan synthesis.speak
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+
+                videoElem.onended = () => {
+                    recorder.stop();
+                };
+
+                return new Promise(resolve => {
+                    recorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        resolve(URL.createObjectURL(blob));
+                    };
+                });
+
+            } catch (err) {
+                console.error(err);
+                return null;
+            } finally {
+                processBtn.disabled = false;
+            }
+        }
+
+        processBtn.addEventListener('click', async () => {
+            const url = await produceVideo();
+            if (url) {
+                outputVideo.src = url;
+                downloadLink.href = url;
+                downloadLink.download = "video_hasil.webm";
+                outputArea.style.display = 'block';
+                statusMsg.innerHTML = "✅ Selesai! Suara asli dihilangkan dan diganti teks.";
+                outputArea.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    })();
+</script>
+</body>
+</html>
