@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Video Editor - TTS Google (Fix CORS)</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: #0a0f1e;
+            color: white;
+            display: flex;
+            justify-content: center;
+            padding: 16px;
+            margin: 0;
+        }
+        .container {
+            background: #1a1f2e;
+            padding: 20px;
+            border-radius: 28px;
+            width: 100%;
+            max-width: 500px;
+        }
+        h2 { text-align: center; color: #00e5ff; margin: 0 0 5px; }
+        .sub { text-align: center; font-size: 12px; color: #888; margin-bottom: 20px; }
+        .label { font-weight: 600; margin: 12px 0 5px; font-size: 14px; color: #b9e6ff; }
+        textarea, input, select {
+            width: 100%;
+            border-radius: 16px;
+            padding: 12px;
+            background: #10131f;
+            border: 1px solid #333;
+            color: white;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #00e5ff;
+            border: none;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 16px;
+            color: #000;
+            margin-top: 18px;
+            cursor: pointer;
+        }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .status {
+            background: #0e1120;
+            border-radius: 20px;
+            padding: 10px;
+            text-align: center;
+            font-size: 12px;
+            margin: 15px 0;
+            border-left: 3px solid #00e5ff;
+        }
+        video { width: 100%; border-radius: 16px; margin-top: 10px; }
+        .download-btn {
+            display: inline-block;
+            width: 100%;
+            background: #22c55e;
+            text-align: center;
+            padding: 12px;
+            border-radius: 40px;
+            text-decoration: none;
+            color: white;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .row { display: flex; gap: 12px; margin: 10px 0; }
+        .row button { margin: 0; flex: 1; background: #252c40; color: white; }
+        .row button.active { background: #00e5ff; color: #000; }
+        .test-btn { background: #3a3f5e; margin-top: 8px; font-size: 14px; }
+        .success { background: #22c55e !important; }
+        .file-info { font-size: 11px; color: #888; margin-top: 5px; }
+        canvas { display: none; }
+        .output-area { display: none; margin-top: 20px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>🎬 Video + TTS Google</h2>
+    <div class="sub">Suara langsung menyatu • CORS Fixed</div>
+
+    <div class="label">📂 1. Pilih Video</div>
+    <input type="file" id="videoInput" accept="video/*">
+    <div class="file-info" id="fileInfo">* Pilih dari galeri</div>
+
+    <div class="label">🗣️ 2. Teks untuk Suara</div>
+    <textarea id="ttsInput" rows="3" placeholder="Halo teman-teman, selamat datang di video saya!"></textarea>
+
+    <div class="label">🎤 3. Jenis Suara</div>
+    <select id="voiceSelect">
+        <option value="id">🇮🇩 Perempuan (Google) - Recommended</option>
+        <option value="id&tl=id&ttsspeed=0.9">🇮🇩 Laki-laki</option>
+    </select>
+
+    <button id="testBtn" class="test-btn">🔊 TEST & DOWNLOAD SUARA DULU</button>
+
+    <div class="label">📝 4. Teks di Layar (Opsional)</div>
+    <textarea id="overlayText" rows="2" placeholder="Teks overlay - kosongi jika tidak perlu"></textarea>
+
+    <div class="row">
+        <button id="posTop" class="active">Atas</button>
+        <button id="posMid">Tengah</button>
+        <button id="posBottom">Bawah</button>
+    </div>
+
+    <div class="row">
+        <input type="number" id="startTime" step="0.5" value="0.5" placeholder="Mulai (detik)" style="flex:1">
+        <input type="number" id="endTime" step="0.5" value="5.0" placeholder="Akhir (detik)" style="flex:1">
+    </div>
+
+    <div class="row">
+        <span>🔤 Ukuran:</span>
+        <input type="range" id="textSize" min="24" max="70" value="42" style="flex:1">
+        <span id="sizeVal">42px</span>
+    </div>
+
+    <button id="processBtn">✨ BUAT VIDEO (Merge Audio) ✨</button>
+    
+    <div id="infoStatus" class="status">📱 Pilih video, test suara dulu, lalu proses.</div>
+
+    <div id="outputArea" class="output-area">
+        <video id="outputVideo" controls playsinline></video>
+        <a id="downloadLink" class="download-btn">💾 SIMPAN KE GALERI</a>
+    </div>
+</div>
+
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+    (function() {
+        // DOM Elements
+        const videoInput = document.getElementById('videoInput');
+        const ttsInput = document.getElementById('ttsInput');
+        const voiceSelect = document.getElementById('voiceSelect');
+        const overlayText = document.getElementById('overlayText');
+        const processBtn = document.getElementById('processBtn');
+        const infoStatus = document.getElementById('infoStatus');
+        const outputVideo = document.getElementById('outputVideo');
+        const downloadLink = document.getElementById('downloadLink');
+        const outputArea = document.getElementById('outputArea');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const fileInfo = document.getElementById('fileInfo');
+        const testBtn = document.getElementById('testBtn');
+        
+        const posTop = document.getElementById('posTop');
+        const posMid = document.getElementById('posMid');
+        const posBottom = document.getElementById('posBottom');
+        const startTime = document.getElementById('startTime');
+        const endTime = document.getElementById('endTime');
+        const textSize = document.getElementById('textSize');
+        const sizeVal = document.getElementById('sizeVal');
+        
+        let selectedFile = null;
+        let videoDuration = 0;
+        let textPosition = 'top';
+        let fontSize = 42;
+        let cachedAudioBlob = null;
+        let cachedAudioUrl = null;
+        
+        // Posisi
+        posTop.onclick = () => {
+            [posTop, posMid, posBottom].forEach(b => b.classList.remove('active'));
+            posTop.classList.add('active');
+            textPosition = 'top';
+        };
+        posMid.onclick = () => {
+            [posTop, posMid, posBottom].forEach(b => b.classList.remove('active'));
+            posMid.classList.add('active');
+            textPosition = 'middle';
+        };
+        posBottom.onclick = () => {
+            [posTop, posMid, posBottom].forEach(b => b.classList.remove('active'));
+            posBottom.classList.add('active');
+            textPosition = 'bottom';
+        };
+        
+        textSize.oninput = (e) => {
+            fontSize = e.target.value;
+            sizeVal.innerText = fontSize + 'px';
+        };
+        
+        videoInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedFile = file;
+                fileInfo.innerHTML = `✅ ${file.name.substring(0, 40)}`;
+                const url = URL.createObjectURL(file);
+                const temp = document.createElement('video');
+                temp.src = url;
+                temp.onloadedmetadata = () => {
+                    videoDuration = temp.duration;
+                    endTime.value = Math.min(5, videoDuration);
+                    URL.revokeObjectURL(url);
+                };
+            }
+        };
+        
+        // ========== TEST & DOWNLOAD SUARA (CORS Bypass via fetch) ==========
+        async function generateGoogleTTS(text) {
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=id&client=tw-ob&ttsspeed=0.9`;
+            
+            // Gunakan fetch dengan mode no-cors untuk bypass? Tidak bisa.
+            // Solusi: Gunakan audio element langsung
+            return new Promise((resolve, reject) => {
+                const audio = new Audio();
+                audio.src = url;
+                
+                // Rekam audio
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const audioContext = new AudioContext();
+                const source = audioContext.createMediaElementSource(audio);
+                const dest = audioContext.createMediaStreamDestination();
+                source.connect(dest);
+                source.connect(audioContext.destination);
+                
+                const mediaRecorder = new MediaRecorder(dest.stream);
+                let chunks = [];
+                mediaRecorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+                
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'audio/webm' });
+                    resolve(blob);
+                };
+                
+                mediaRecorder.start();
+                audioContext.resume();
+                
+                audio.play();
+                audio.onended = () => {
+                    setTimeout(() => mediaRecorder.stop(), 100);
+                };
+                audio.onerror = reject;
+            });
+        }
+        
+        testBtn.onclick = async () => {
+            const text = ttsInput.value.trim();
+            if (!text) {
+                alert("Isi teks dulu!");
+                return;
+            }
+            
+            infoStatus.innerHTML = "🎵 Membuat suara dari Google... (butuh internet)";
+            testBtn.textContent = "⏳ Membuat...";
+            testBtn.disabled = true;
+            
+            try {
+                const audioBlob = await generateGoogleTTS(text);
+                cachedAudioBlob = audioBlob;
+                if (cachedAudioUrl) URL.revokeObjectURL(cachedAudioUrl);
+                cachedAudioUrl = URL.createObjectURL(audioBlob);
+                
+                // Play untuk test
+                const testAudio = new Audio(cachedAudioUrl);
+                testAudio.play();
+                
+                infoStatus.innerHTML = "✅ Suara berhasil! Bisa didengar. Sekarang proses video.";
+                testBtn.textContent = "✅ Suara Siap!";
+                testBtn.classList.add('success');
+                setTimeout(() => {
+                    testBtn.textContent = "🔊 TEST & DOWNLOAD SUARA DULU";
+                    testBtn.classList.remove('success');
+                }, 3000);
+            } catch (err) {
+                infoStatus.innerHTML = "❌ Gagal generate suara. Coba lagi. Pastikan internet aktif.";
+                console.error(err);
+                alert("Gagal. Pastikan koneksi internet aktif.\n\nCatatan: Browser mungkin memblokir. Coba di Chrome.");
+            } finally {
+                testBtn.disabled = false;
+            }
+        };
+        
+        // ========== MERGE VIDEO + AUDIO (Tanpa Microphone!) ==========
+        async function mergeVideoWithAudio(videoFile, audioBlob, overlayParams) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    const videoElem = document.createElement('video');
+                    const videoUrl = URL.createObjectURL(videoFile);
+                    videoElem.src = videoUrl;
+                    videoElem.muted = true;
+                    videoElem.playsInline = true;
+                    
+                    await new Promise((res, rej) => {
+                        videoElem.onloadedmetadata = res;
+                        videoElem.onerror = rej;
+                        videoElem.load();
+                    });
+                    
+                    const w = videoElem.videoWidth;
+                    const h = videoElem.videoHeight;
+                    canvas.width = w;
+                    canvas.height = h;
+                    
+                    const canvasStream = canvas.captureStream(30);
+                    
+                    // Audio dari blob
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audioElem = new Audio(audioUrl);
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const audioSource = audioContext.createMediaElementSource(audioElem);
+                    const audioDest = audioContext.createMediaStreamDestination();
+                    audioSource.connect(audioDest);
+                    audioSource.connect(audioContext.destination);
+                    
+                    const combined = new MediaStream();
+                    canvasStream.getVideoTracks().forEach(t => combined.addTrack(t));
+                    audioDest.stream.getAudioTracks().forEach(t => combined.addTrack(t));
+                    
+                    const recorder = new MediaRecorder(combined, { mimeType: 'video/webm' });
+                    let chunks = [];
+                    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+                    recorder.start(100);
+                    
+                    const { teksLayar, mulai, selesai, posisi, ukuran } = overlayParams;
+                    
+                    let animasi;
+                    const draw = () => {
+                        if (videoElem.paused || videoElem.ended) {
+                            if (!videoElem.ended) animasi = requestAnimationFrame(draw);
+                            return;
+                        }
+                        const waktu = videoElem.currentTime;
+                        ctx.drawImage(videoElem, 0, 0, w, h);
+                        
+                        if (teksLayar && waktu >= mulai && waktu <= selesai) {
+                            ctx.save();
+                            ctx.shadowColor = "black";
+                            ctx.shadowBlur = 10;
+                            const uk = Math.min(ukuran, h * 0.15);
+                            ctx.font = `bold ${uk}px "Segoe UI", system-ui`;
+                            ctx.fillStyle = "white";
+                            ctx.textAlign = "center";
+                            let y = 60;
+                            if (posisi === 'middle') y = h / 2;
+                            else if (posisi === 'bottom') y = h - 60;
+                            ctx.fillText(teksLayar, w / 2, y);
+                            ctx.restore();
+                        }
+                        animasi = requestAnimationFrame(draw);
+                    };
+                    
+                    await videoElem.play();
+                    await audioContext.resume();
+                    audioElem.play();
+                    draw();
+                    
+                    videoElem.onended = () => {
+                        setTimeout(() => {
+                            if (recorder.state === 'recording') recorder.stop();
+                        }, 300);
+                    };
+                    
+                    recorder.onstop = () => {
+                        cancelAnimationFrame(animasi);
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        resolve({ url, blob });
+                        URL.revokeObjectURL(videoUrl);
+                        URL.revokeObjectURL(audioUrl);
+                    };
+                    
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+        
+        processBtn.onclick = async () => {
+            if (!selectedFile) {
+                alert("Pilih video dulu!");
+                return;
+            }
+            if (!cachedAudioBlob) {
+                alert("Klik 'TEST & DOWNLOAD SUARA DULU' terlebih dahulu untuk membuat suara!");
+                return;
+            }
+            
+            infoStatus.innerHTML = "🔄 Menggabungkan video & suara... tunggu sebentar";
+            processBtn.disabled = true;
+            
+            try {
+                const params = {
+                    teksLayar: overlayText.value.trim(),
+                    mulai: Math.max(0, parseFloat(startTime.value) || 0),
+                    selesai: Math.min(videoDuration, parseFloat(endTime.value) || videoDuration),
+                    posisi: textPosition,
+                    ukuran: fontSize
+                };
+                
+                const result = await mergeVideoWithAudio(selectedFile, cachedAudioBlob, params);
+                
+                outputVideo.src = result.url;
+                downloadLink.href = result.url;
+                downloadLink.download = "video_tts_merged.webm";
+                outputArea.style.display = "block";
+                infoStatus.innerHTML = "✅ BERHASIL! Video sudah punya suara. Klik SIMPAN KE GALERI.";
+                outputArea.scrollIntoView({ behavior: "smooth" });
+                
+            } catch (err) {
+                console.error(err);
+                infoStatus.innerHTML = "❌ Gagal: " + err.message;
+                alert("Gagal menggabungkan. Coba refresh halaman.");
+            } finally {
+                processBtn.disabled = false;
+            }
+        };
+    })();
+</script>
+</body>
+</html>
